@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='chessboard-1.0.0.css') }}">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.js"></script>
+    <script src="{{ url_for('static', filename='chessboard-1.0.0.js') }}"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <style>
+        table {
+          font-family: arial, sans-serif;
+          border-collapse: collapse;
+          width: 100%;
+        }
+        
+        td, th {
+          border: 1px solid #dddddd;
+          text-align: left;
+          padding: 8px;
+        }
+        
+        tr:nth-child(even) {
+          background-color: #dddddd;
+        }
+        </style>
+</head>
+<body>
+    <div id="myBoard" style="width: 400px"></div>
+    <br>
+    <button id="vetoBtn" style="padding: 10px;">Veto</button>
+    <br><br>
+    <table>
+        <tr>
+            <th><label>Status:</label></th>
+            <td><div id="status"></div></td>
+        </tr>
+        <tr>
+            <th><label>FEN:</label></th>
+            <td><div id="fen"></div></td>
+        </tr>
+        <tr>
+            <th><label>PGN:</label></th>
+            <td><div id="pgn"></div></td>
+        </tr>
+    </table>
+
+    
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
