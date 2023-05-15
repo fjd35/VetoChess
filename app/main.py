@@ -1,35 +1,31 @@
-from flask import Flask, render_template, session, redirect, abort
+from flask import Blueprint, render_template, session, redirect, abort
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import json
 
-from game import Game
-from distance_api import api
+from . import socketio, Game
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = "reallyreallysecret"
-app.register_blueprint(api)
-socketio = SocketIO(app)
+main_blueprint = Blueprint("main_blueprint", __name__)
 
 games = {}
 
-@app.route("/")
+@main_blueprint.route("/")
 def index():
     return render_template("index.html", existing_games=list(games.keys()))
 
-@app.route("/delete_game/<int:game_id>", methods=["DELETE"])
+@main_blueprint.route("/delete_game/<int:game_id>", methods=["DELETE"])
 def delete_game(game_id):
     emit("kick", to=game_id, namespace="/")
     if not games.pop(game_id, False):
         abort(404, f"Game {game_id} not found")
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
-@app.route("/play/<int:game_id>")
+@main_blueprint.route("/play/<int:game_id>")
 def play(game_id):
     game = games.setdefault(game_id, Game())
     session["game_id"] = game_id
     return render_template("play.html")
 
-@app.route("/play")
+@main_blueprint.route("/play")
 def new_game():
     game_id = 1
     while game_id in games:
@@ -84,6 +80,3 @@ def new_game():
 
 def emit_board(fen: str, can_veto: bool, **kwargs):
     emit("update_board", {"fen": fen, "can_veto": can_veto, **kwargs}, to=session["game_id"])
-
-if __name__ == "__main__":
-    socketio.run(app, debug=True)
