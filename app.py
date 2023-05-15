@@ -3,9 +3,11 @@ from flask_socketio import SocketIO, emit, join_room, leave_room
 import json
 
 from game import Game
+from distance_api import api
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "reallyreallysecret"
+app.register_blueprint(api)
 socketio = SocketIO(app)
 
 games = {}
