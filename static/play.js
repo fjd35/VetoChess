@@ -8,7 +8,8 @@ var socket = io();
 var role;
 var can_veto = true;
 var prev_move;
-var banned_move = null;
+var banned_source = null;
+var banned_target = null;
 
 
 function onDragStart (source, piece, position, orientation) {
@@ -31,10 +32,20 @@ function onDrop (source, target) {
     })
 
     // illegal move
-    if (move === null || move === banned_move) return 'snapback'
+    if (move === null) {
+        console.log('illegal')
+        return 'snapback'
+    } 
+    if (source === banned_source && target === banned_target) {
+        console.log('banned')
+        game.undo()
+        return 'snapback'
+    }
 
     prev_move = move;
-    banned_move = null;
+    banned_source = null;
+    banned_target = null;
+    socket.emit('move', source + target + (move.promotion || ''));
 
     updateStatus()
 }
@@ -43,7 +54,6 @@ function onDrop (source, target) {
 // for castling, en passant, pawn promotion
 function onSnapEnd () {
     board.position(game.fen());
-    socket.emit('move', game.pgn());
 }
 
 function updateStatus () {
@@ -81,8 +91,11 @@ function updateStatus () {
 }
 
 function veto () {
-    banned_move = prev_move;
     socket.emit('veto');
+}
+
+function new_game () {
+    socket.emit("new_game");
 }
 
 socket.on('connect', function() {
@@ -91,14 +104,34 @@ socket.on('connect', function() {
 });
 socket.on('role', function(data) {
     role = data;
-    console.log('role: ' + role)
+
     board.orientation((role === 'b') ? 'black' : 'white');
+    
+    var full_role;
+    switch(role) {
+        case 'w':
+            full_role = 'White';
+            break;
+        case 'b':
+            full_role = 'Black';
+            break
+        default:
+            full_role = 'Spectator';
+    }
+    $('#role').html(full_role);
 });
 socket.on('update_board', function(data) {
-    game.load_pgn(data['pgn']);
+    game.load(data['fen']);
     board.position(game.fen());
     can_veto = data['can_veto'];
+    if ('banned_source' in data) {
+        banned_source = data['banned_source'];
+        banned_target = data['banned_target'];
+    }
     updateStatus()
+});
+socket.on('kick', function() {
+    window.location.replace("/");
 })
 
 var config = {
@@ -112,5 +145,5 @@ board = Chessboard('myBoard', config)
 
 updateStatus()
 
-
 $vetoBtn.on('click', veto);
+$('#newGameBtn').on('click', new_game);

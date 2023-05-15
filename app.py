@@ -1,7 +1,8 @@
-from flask import Flask, render_template, session
+from flask import Flask, render_template, session, redirect, abort
 from flask_socketio import SocketIO, emit, join_room, leave_room
+import json
 
-from board import Board
+from game import Game
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "reallyreallysecret"
@@ -11,19 +12,31 @@ games = {}
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", existing_games=list(games.keys()))
+
+@app.route("/delete_game/<int:game_id>", methods=["DELETE"])
+def delete_game(game_id):
+    emit("kick", to=game_id, namespace="/")
+    if not games.pop(game_id, False):
+        abort(404, f"Game {game_id} not found")
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route("/play/<int:game_id>")
 def play(game_id):
-    global games
-    game = games.setdefault(game_id, Board())
+    game = games.setdefault(game_id, Game())
     session["game_id"] = game_id
     return render_template("play.html")
 
+@app.route("/play")
+def new_game():
+    game_id = 1
+    while game_id in games:
+        game_id += 1
+    return redirect(f"/play/{game_id}")
+
 @socketio.on("joined")
 def joined(socket_id):
-    global games
-    game: Board = games[session["game_id"]]
+    game: Game = games[session["game_id"]]
     session["socket_id"] = socket_id
     join_room(session["game_id"])
 
@@ -36,13 +49,12 @@ def joined(socket_id):
     else:
         emit("role", "s") # spectator
     
-    emit("update_board", {"pgn": game.board_state, "can_veto": True}, to=session["game_id"])
+    emit_board(game.fen(), game.can_veto)
 
 @socketio.on("disconnect")
 def disconnect():
     print(f"{session['socket_id']} left")
-    global games
-    game: Board = games[session["game_id"]]
+    game: Game = games[session["game_id"]]
     if game.white_socket_id == session["socket_id"]:
         game.white_socket_id = None
     elif game.black_socket_id == session["socket_id"]:
@@ -50,18 +62,26 @@ def disconnect():
     leave_room(session["game_id"])
 
 @socketio.on("move")
-def move(new_board_state: str):
-    global games
-    game: Board = games[session["game_id"]]
-    game.update_board_state(new_board_state)
-    emit("update_board", {"pgn": game.board_state, "can_veto": True}, to=session["game_id"])
+def move(uci):
+    game: Game = games[session["game_id"]]
+    game.make_move(uci)
+    emit_board(game.fen(), game.can_veto)
 
 @socketio.on("veto")
 def veto():
-    global games
-    game: Board = games[session["game_id"]]
-    game.veto()
-    emit("update_board", {"pgn": game.board_state, "can_veto": False}, to=session["game_id"])
+    game: Game = games[session["game_id"]]
+    source, target = game.veto()
+    print(game.fen())
+    emit_board(game.fen(), game.can_veto, banned_source=source, banned_target=target)
+
+@socketio.on("new_game")
+def new_game():
+    game: Game = games[session["game_id"]]
+    game.reset()
+    emit_board(game.fen(), game.can_veto)
+
+def emit_board(fen: str, can_veto: bool, **kwargs):
+    emit("update_board", {"fen": fen, "can_veto": can_veto, **kwargs}, to=session["game_id"])
 
 if __name__ == "__main__":
     socketio.run(app, debug=True)
