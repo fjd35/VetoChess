@@ -4,7 +4,13 @@ var $status = $('#status')
 var $fen = $('#fen')
 var $pgn = $('#pgn')
 var $vetoBtn = $('#vetoBtn')
-var socket = io();
+
+var game_id = window.location.href.substring(window.location.href.lastIndexOf('/') + 1);
+var pusher = new Pusher('27a9c27858a52b91a94e', {
+    cluster: 'eu'
+});
+var channel = pusher.subscribe('game' + game_id);
+
 var role;
 var can_veto = true;
 var prev_move;
@@ -45,7 +51,16 @@ function onDrop (source, target) {
     prev_move = move;
     banned_source = null;
     banned_target = null;
-    socket.emit('move', source + target + (move.promotion || ''));
+    fetch('/move', {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            uci: source + target + (move.promotion || '')
+        })
+    });
 
     updateStatus()
 }
@@ -91,36 +106,44 @@ function updateStatus () {
 }
 
 function veto () {
-    socket.emit('veto');
+    fetch('/veto', {method: 'POST'});
 }
 
 function new_game () {
-    socket.emit("new_game");
+    fetch('/new_game', {method: 'POST'});
 }
 
-socket.on('connect', function() {
-    socket.emit('joined', socket.id);
-    console.log('joined');
-});
-socket.on('role', function(data) {
-    role = data;
+function disconnect () {
+    fetch('/disconnect', {method: 'POST'});
+}
 
-    board.orientation((role === 'b') ? 'black' : 'white');
-    
-    var full_role;
-    switch(role) {
-        case 'w':
-            full_role = 'White';
-            break;
-        case 'b':
-            full_role = 'Black';
-            break
-        default:
-            full_role = 'Spectator';
-    }
-    $('#role').html(full_role);
+channel.bind('pusher:subscription_succeeded', function() {
+    fetch('/role', {
+        method: 'POST', 
+        body: JSON.stringify(pusher.sessionID)
+    })
+    .then((response) => response.json())
+    .then(function(data) {
+        role = data['role'];
+        console.log('joined with role ' + role);
+        board.orientation((role === 'b') ? 'black' : 'white');
+        
+        var full_role;
+        switch(role) {
+            case 'w':
+                full_role = 'White';
+                break;
+            case 'b':
+                full_role = 'Black';
+                break
+            default:
+                full_role = 'Spectator';
+        }
+        $('#role').html(full_role);
+    });
 });
-socket.on('update_board', function(data) {
+
+channel.bind('update_board', function(data) {
     game.load(data['fen']);
     board.position(game.fen());
     can_veto = data['can_veto'];
@@ -130,9 +153,14 @@ socket.on('update_board', function(data) {
     }
     updateStatus()
 });
-socket.on('kick', function() {
+channel.bind('kick', function() {
     window.location.replace("/");
 })
+
+pusher.connection.bind('disconnected', function() {
+    disconnect();
+})
+window.onbeforeunload = disconnect;
 
 var config = {
     draggable: true,

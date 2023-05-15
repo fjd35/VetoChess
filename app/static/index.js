@@ -18,8 +18,9 @@ function makeRandomMove () {
 function deleteGame(game_id) {
     fetch('/delete_game/' + game_id,  {
         method: 'DELETE'
-    });
-    location.reload();
+    }).then((response) => {
+        window.location.reload();
+    })
 }
 
 window.addEventListener( "pageshow", function ( event ) {
